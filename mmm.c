@@ -2,22 +2,27 @@
 #include <stdio.h>
 #include <dlfcn.h>
 #include<unistd.h>
-int allocation_count = 0,cccm=0;
+int line;
+#define free(p) _free(p,__LINE__)
+#define malloc(p) _malloc(p,__LINE__)
+int allocation_count = 0,cccm=1;
 
 typedef struct memory_tracker
 {
 	long address;
 	int block;
+	int line;
 	struct memory_tracker *next;
 }mem_trac;
 
 mem_trac * header = NULL;
 
-mem_trac add_memory(void * p, int size)
+mem_trac add_memory(void * p, int size, int line)
 {
     mem_trac* mt = sbrk(sizeof(mem_trac));
     mt->address = (long)p;
     mt->block = size; 
+    mt->line = line;
     mt->next = NULL;
     if(header==NULL)
     {
@@ -32,16 +37,16 @@ mem_trac add_memory(void * p, int size)
     	}
     	temp->next = mt;
     }
-        printf("Memory added = %ld(%p)--%dbytes\n::",mt->address,p,mt->block);
+        printf("Memory added = %ld(%p)--%dbytes : line(%d)\n::",mt->address,p,mt->block,mt->line);
 }
 
 
-int remove_memory(void * p)
+int remove_memory(void * p,int line)
 {
     mem_trac * temp =header;
     if(temp==NULL)
     {
-    	printf("Illegal free\n");
+    	printf("Illegal free at %d\n",line);
     	return 0;
     }
     else if(temp->next==NULL)
@@ -49,12 +54,12 @@ int remove_memory(void * p)
     	if(temp->address == (long)p)
     	{
 	    	allocation_count = allocation_count - temp->block;
-	    	printf("Deleted memory = %ld(%p) --%dbytes\n",temp->address,p,temp->block);
+    		printf("Deleted memory = %ld(%p) --%dbytes\n",temp->address,p,temp->block);
     		header = NULL;
     	}
     	else
     	{
-	    	printf("Illegal free\n");
+    	printf("Illegal free at %d\n",line);
     	    	return 0;
     	}
     }
@@ -80,7 +85,7 @@ int remove_memory(void * p)
     	}
     	if(temp==NULL)
     	{
-    		printf("ILlegal free\n");
+    		printf("Illegal free at %d\n",line);
     	    	return 0;
     	}
     }
@@ -88,7 +93,7 @@ int remove_memory(void * p)
 }
 
 
-void *malloc(size_t size)
+void *_malloc(size_t size,int line)
 {
    if(cccm==0) cccm=1;
    else
@@ -109,13 +114,13 @@ void *malloc(size_t size)
 	if(p!=NULL)
 	{
 		allocation_count = allocation_count + (int)size;
-		add_memory(p,(int)size);
+		add_memory(p,(int)size,line);
         }
      	return p;
     }
 }
 
-void free(void *p)
+void _free(void *p,int line)
 {
     printf("\n");
     static void* (*real_free)(void*);
@@ -129,7 +134,7 @@ void free(void *p)
     }
 
     fprintf(stderr, "Freeing(%p)\n", p);
-    int flag = remove_memory(p);
+    int flag = remove_memory(p,line);
 	if(flag==1)
 	{    
 		real_free(p);
