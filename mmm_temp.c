@@ -7,7 +7,7 @@
 #define free(p) _free(p,__LINE__)
 #define malloc(p) _malloc(p,__LINE__)
 #define realloc(p,s) _realloc(p,s,__LINE__)
-int allocation_count = 0,cccm=1;
+int allocation_count = 0;
 
 typedef struct memory_tracker
 {
@@ -26,6 +26,11 @@ typedef struct illegal_free
 
 ill_free * header1 =NULL;
 mem_trac * header = NULL;
+
+void my_printf(char a[])
+{
+	printf("%s",a); //uncomment to get detailed log
+}
 
 void add_ill_free_memory(int line)
 {
@@ -69,7 +74,9 @@ void add_memory(void * p, int size, int line)
     	}
     	temp->next = mt;
     }
-    	printf("Memory added = %ld(%p)--%dbytes : line(%d)\n",mt->address,p,mt->block,mt->line);
+    	char c[100];
+        sprintf(c,"Memory added = %ld(%p)--%dbytes : line(%d)\n",mt->address,p,mt->block,mt->line);
+        my_printf(c);
 }
 
 
@@ -78,7 +85,9 @@ int remove_memory(void * p,int line)
     mem_trac * temp =header;
     if(temp==NULL)
     {
-    	printf("Illegal free at %d\n",line);
+	char c[100];
+        sprintf(c,"Illegal free at %d\n",line);
+        my_printf(c);
     	add_ill_free_memory(line);
     	return 0;
     }
@@ -87,12 +96,16 @@ int remove_memory(void * p,int line)
     	if(temp->address == (long)p)
     	{
 	    	allocation_count = allocation_count - temp->block;
-    		printf("Deleted memory = %ld(%p) --%dbytes\n",temp->address,p,temp->block);
+		char c[100];
+	        sprintf(c,"Deleted memory = %ld(%p) --%dbytes\n",temp->address,p,temp->block);
+	        my_printf(c);
     		header = NULL;
     	}
     	else
     	{
-	    	printf("Illegal free at %d\n",line);
+		char c[100];
+        	sprintf(c,"Illegal free at %d\n",line);
+	        my_printf(c);
     	    	add_ill_free_memory(line);
     	    	return 0;
     	}
@@ -100,7 +113,9 @@ int remove_memory(void * p,int line)
     else if(temp->address == (long)p)
     {
     	allocation_count = allocation_count - temp->block;
-	printf("Deleted memory = %ld(%p) --%dbytes\n",temp->address,p,temp->block);
+	char c[100];
+       	sprintf(c,"Deleted memory = %ld(%p) --%dbytes\n",temp->address,p,temp->block);
+        my_printf(c);
  	header= temp->next;    		
     }
     else
@@ -109,8 +124,10 @@ int remove_memory(void * p,int line)
     	{
     		if(temp->next->address == (long)p)
     		{
-    			allocation_count = allocation_count - temp->block;
-			printf("Deleted memory = %ld(%p) --%dbytes\n",temp->next->address,p,temp->next->block);
+    			allocation_count = allocation_count - temp->next->block;
+			char c[100];
+			sprintf(c,"Deleted memory = %ld(%p) --%dbytes\n",temp->next->address,p,temp->next->block);
+			my_printf(c);
     			temp->next = temp->next->next;
     			brk(temp->next);
    			break;
@@ -119,7 +136,9 @@ int remove_memory(void * p,int line)
     	}
     	if(temp==NULL)
     	{
-    		printf("Illegal free at %d\n",line);
+		char c[100];
+		sprintf(c,"Illegal free at %d\n",line);
+		my_printf(c);
 	    	add_ill_free_memory(line);
     	    	return 0;
     	}
@@ -138,7 +157,9 @@ void update_memory(void *new_p,void *p, int size,int line)
 			temp->address = (long)new_p;
 			temp->block = size;
 			temp->line = line;
-			printf("New Address=%ld--Block=%d\n",temp->address,temp->block);
+			char c[100];
+			sprintf(c,"New Address=%ld--Block=%d\n",temp->address,temp->block);
+			my_printf(c);
 			break;
 		}
 		temp=temp->next;
@@ -154,10 +175,7 @@ void update_memory(void *new_p,void *p, int size,int line)
 
 void *_malloc(size_t size,int line)
 {
-   if(cccm==0) cccm=1;
-   else
-   { 
-   	printf("\n");
+	my_printf("\n");
    	static void* (*real_malloc)(size_t);
     	if(real_malloc==NULL) 
     	{
@@ -168,7 +186,9 @@ void *_malloc(size_t size,int line)
     		}
     	}
 	void *p = NULL;	
-	fprintf(stderr,"malloc(%d)::\n", (int)size);
+	char *c = sbrk(1);
+	sprintf(c,"malloc(%d)::\n", (int)size);
+	my_printf(c);
 	p = real_malloc(size);
 	if(p!=NULL)
 	{
@@ -176,16 +196,12 @@ void *_malloc(size_t size,int line)
 		add_memory(p,(int)size,line);
         }
      	return p;
-    }
 }
 
 
 void *_realloc(void *p, size_t size,int line)
 {
-   if(cccm==0) cccm=1;
-   else
-   { 
-   	printf("\n");
+   	my_printf("\n");
    	static void* (*real_realloc)(void*,size_t);
     	if(real_realloc==NULL) 
     	{
@@ -196,7 +212,9 @@ void *_realloc(void *p, size_t size,int line)
     		}
     	}
 	void *new_p = NULL;	
-	fprintf(stderr,"realloc(%d)::\n", (int)size);
+	char *c = sbrk(1);
+	sprintf(c,"realloc(%d)::\n", (int)size);
+	my_printf(c);
 	new_p = real_realloc(p,size);
 	if(new_p!=NULL)
 	{
@@ -207,12 +225,11 @@ void *_realloc(void *p, size_t size,int line)
         	remove_memory(p,line);
         }
      	return new_p;
-    }
 }
 
 void _free(void *p,int line)
 {
-    printf("\n");
+    my_printf("\n");
     static void* (*real_free)(void*);
     if(real_free==NULL) 
     {
@@ -223,17 +240,17 @@ void _free(void *p,int line)
     	}
     }
 
-    fprintf(stderr, "Freeing(%p)\n", p);
+//    fprintf(stderr,"Freeing(%p)\n", p);
     int flag = remove_memory(p,line);
-	if(flag==1)
-	{    
-		real_free(p);
-    		printf("freed\n");
-    	}
+    if(flag==1)
+    {    
+	real_free(p);
+    	my_printf("freed\n");
+    }
 
 }
 
-void print_mem()
+void print_mem()  //for reference
 {
 	mem_trac * temp =header;
 	if(temp!=NULL)
@@ -250,7 +267,7 @@ void print_mem()
 void leak_result()
 {
 	mem_trac * temp1 =header;
-	printf("\n\tSummary of data which are not freed ::\n\n");
+	printf("\n\tSummary of data which are not freed :: Total %d blocks\n\n",allocation_count);
 	if(temp1!=NULL)
 	{	
 		while(temp1!=NULL)
@@ -286,24 +303,21 @@ int main()
 {
 	printf("\n");
 	int * a = malloc(0);
-        printf("after a\n");
-	print_mem();
+
+        int * b = malloc(sizeof(int));
+
+        char * d1 = malloc(100*sizeof(d1));
+
+  //      free(d1);
 	
-	int * b = malloc(sizeof(int));
-        printf("after b\n");
-		print_mem();
-	//free(a);
-	  //      printf("after free a\n");
-		//	print_mem();
+//	free(a);
+
 	int * d = NULL;
 	int * c = realloc(d,0);		
-	        printf("after free a and add c\n");
-		print_mem();
-        free(b);
-        printf("after free b\n");
-        	print_mem();
-       	printf("count=%d\n",allocation_count);
-	b=NULL;
+	
+//	free(b);
+        b=NULL;
+ 
  	free(c);
  	leak_result();
 }
