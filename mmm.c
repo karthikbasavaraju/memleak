@@ -1,11 +1,12 @@
-#define _GNU_SOURCE
+#define _GNU_SOURCE // to compile : gcc mmm.c -lstdc++ -Wl,--no-as-needed -ldl
 #include <stdio.h>
 #include <dlfcn.h>
 #include<unistd.h>
 #include<stdlib.h>
-int line;
+
 #define free(p) _free(p,__LINE__)
 #define malloc(p) _malloc(p,__LINE__)
+#define realloc(p,s) _realloc(p,s,__LINE__)
 int allocation_count = 0,cccm=1;
 
 typedef struct memory_tracker
@@ -27,7 +28,7 @@ ill_free * header1 =NULL;
 mem_trac * header = NULL;
 
 
-mem_trac add_ill_free_memory(int line)
+void add_ill_free_memory(int line)
 {
     ill_free* mt = sbrk(sizeof(ill_free));
     mt->line = line;
@@ -45,12 +46,11 @@ mem_trac add_ill_free_memory(int line)
     	}
     	temp->next = mt;
     }
-        //printf("Memory added = %ld(%p)--%dbytes : line(%d)\n",mt->address,p,mt->block,mt->line);
 }
 
 
 
-mem_trac add_memory(void * p, int size, int line)
+void add_memory(void * p, int size, int line)
 {
     mem_trac* mt = sbrk(sizeof(mem_trac));
     mt->address = (long)p;
@@ -128,6 +128,30 @@ int remove_memory(void * p,int line)
     return 1;
 }
 
+void update_memory(void *new_p,void *p, int size,int line)
+{
+	mem_trac * temp =header;
+	while(temp!=NULL)
+	{
+		if(temp->address == (long)p)
+		{
+			allocation_count = allocation_count + size -temp->block;
+			temp->address = (long)new_p;
+			temp->block = size;
+			temp->line = line;
+			printf("New Address=%ld--Block=%d\n",temp->address,temp->block);
+			break;
+		}
+		temp=temp->next;
+	}
+	if(temp==NULL)
+	{
+		allocation_count = allocation_count + (int)size;
+		add_memory(new_p,size,line);
+	}
+}
+
+
 
 void *_malloc(size_t size,int line)
 {
@@ -153,6 +177,37 @@ void *_malloc(size_t size,int line)
 		add_memory(p,(int)size,line);
         }
      	return p;
+    }
+}
+
+
+void *_realloc(void *p, size_t size,int line)
+{
+   if(cccm==0) cccm=1;
+   else
+   { 
+   	printf("\n");
+   	static void* (*real_realloc)(void*,size_t);
+    	if(real_realloc==NULL) 
+    	{
+    		real_realloc = dlsym(RTLD_NEXT, "realloc");
+    		if (NULL == real_realloc) 
+    		{
+        		fprintf(stderr, "Error in `dlsym`malloc: %s\n", dlerror());
+    		}
+    	}
+	void *new_p = NULL;	
+	fprintf(stderr,"realloc(%d)::\n", (int)size);
+	new_p = real_realloc(p,size);
+	if(new_p!=NULL)
+	{
+		update_memory(new_p,p,(int)size,line);
+        }
+        else
+        {
+        	remove_memory(p,line);
+        }
+     	return new_p;
     }
 }
 
@@ -196,28 +251,34 @@ void print_mem()
 void leak_result()
 {
 	mem_trac * temp1 =header;
-	printf("\n\t\tLeaked summary\n");
+	printf("\n\tSummary of data which are not freed ::\n\n");
 	if(temp1!=NULL)
 	{	
 		while(temp1!=NULL)
 		{
 			printf("\t\tAddress=%ld--Blocks=%d--Line=%d\n",temp1->address,temp1->block,temp1->line);
-			temp1=temp1->next;
+			temp1=temp1->next;		
 		}
+		brk(header);
+		header = temp1;
 	}
 	else
-		printf("\t\tNo meory leak\n");
+		printf("\t\tNo Memory leak\n");
 	
 	ill_free * temp =header1;
-	printf("\nLeaked summary\n");
+	printf("\n\tSummary of corrupted memory::\n\n");
 	if(temp!=NULL)
 	{	
 		while(temp!=NULL)
 		{
-			printf("Illegal free at Line=%d\n",temp->line);
+			printf("\t\tDouble free or corruption at Line=%d\n",temp->line);
 			temp=temp->next;
 		}
+		brk(header1);
+		header1 = temp;
 	}
+	else
+		printf("\t\tNO double free\n\n");
 }
 
 
@@ -225,22 +286,25 @@ void leak_result()
 int main()
 {
 	printf("\n");
-	int * a = malloc(10*sizeof(*a));
+	int * a = malloc(0);
+        printf("after a\n");
 	print_mem();
-
-	int * b = malloc(44);
-		print_mem();
 	
-        b=a;
-        free(a);
-        printf("after free a\n");
+	int * b = malloc(sizeof(int));
+        printf("after b\n");
 		print_mem();
-		
+	//free(a);
+	  //      printf("after free a\n");
+		//	print_mem();
+	int * d = NULL;
+	int * c = realloc(d,0);		
+	        printf("after free a and add c\n");
+		print_mem();
         free(b);
         printf("after free b\n");
         	print_mem();
        	printf("count=%d\n",allocation_count);
 	b=NULL;
- 	free(b);
+ 	free(c);
  	leak_result();
 }
