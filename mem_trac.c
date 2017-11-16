@@ -1,16 +1,19 @@
 #define _GNU_SOURCE // to compile : gcc mmm.c -lstdc++ -Wl,--no-as-needed -ldl
 #include <stdio.h>
 #include <dlfcn.h>
-#include<unistd.h>
-#include<stdlib.h>
-#include<string.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define free(p) _free(p,__LINE__)
 #define malloc(p) _malloc(p,__LINE__)
 #define realloc(p,s) _realloc(p,s,__LINE__)
 #define calloc(n,s) _calloc(n,s,__LINE__)
 #define strdup(s) _strdup(s,__LINE__)
-int allocation_count = 0;
+
+
+
+int allocation_count = 0,total_allocation = 0;
 
 typedef struct memory_log
 {
@@ -157,6 +160,7 @@ void update_memory(void *new_p,void *p, int size,int line)
 		if(temp->address == (long)p)
 		{
 			allocation_count = allocation_count + size -temp->block;
+			total_allocation = total_allocation + size - temp->block;
 			temp->address = (long)new_p;
 			temp->block = size;
 			temp->line = line;
@@ -196,6 +200,7 @@ void *_malloc(size_t size,int line)
 	if(p!=NULL)
 	{
 		allocation_count = allocation_count + (int)size;
+		total_allocation = total_allocation + size;
 		add_memory(p,(int)size,line);
         }
      	return p;
@@ -223,6 +228,7 @@ void *_calloc(size_t num,size_t size1,int line)
 	if(p!=NULL)
 	{
 		allocation_count = allocation_count + (int)size;
+		total_allocation = total_allocation + (int)size;
 		add_memory(p,(int)size,line);
         }
      	return p;
@@ -279,6 +285,7 @@ void *_strdup(char *s,int line)
 	if(p!=NULL)
 	{
 		allocation_count = allocation_count + (int)size;
+		total_allocation = total_allocation + size;
 		add_memory(p,(int)size,line);
         }
      	return p;
@@ -329,7 +336,7 @@ void print_mem()  //for reference
 void leak_result()
 {
 	mem_log * temp1 =header;
-	printf("\n\tSummary of data which are not freed :: Total %d blocks\n\n",allocation_count);
+	printf("\n\tSummary of data which are not freed :: Total %d blocks out of %d\n\n",allocation_count,total_allocation);
 	if(temp1!=NULL)
 	{	
 		while(temp1!=NULL)
@@ -359,4 +366,8 @@ void leak_result()
 		printf("\t\tNO double free\n\n");
 }
 
+void last()
+{
+	atexit(leak_result);
+}
 
