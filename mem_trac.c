@@ -300,6 +300,7 @@ void _free(void *p,int line)
     }
 
 //    fprintf(stderr,"Freeing(%p)\n", p);
+
     int flag = remove_memory(p,line);
     if(flag==1)
     {    
@@ -359,30 +360,3 @@ void leak_result()
 }
 
 
-
-int main()
-{
-	printf("\n");
-	//int * a = malloc(0);
-
-        //int * b = malloc(sizeof(int));
-	//int * d =calloc(10,sizeof(int));
-        //char * d1 = malloc(100*sizeof(d1));
-
-
-  	 //strdup("llalal");
-	//char *c=strdup("llalal");
-	//free(c);
-	int * c=NULL;
-	free(c);
-
-	//int * d = NULL;
-	int * c2 = realloc(c,0);		
-	//realloc(d,0);		
-	//b=a;
-	//free(a);
-//        b=NULL;
- 
- 	//free(a);
- 	leak_result();
-}
