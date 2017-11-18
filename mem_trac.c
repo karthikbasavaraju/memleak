@@ -11,6 +11,7 @@
 #define calloc(n,s) _calloc(n,s,__LINE__)
 #define strdup(s) _strdup(s,__LINE__)
 
+void print_summary (void) __attribute__((destructor));
 
 
 int allocation_count = 0,total_allocation = 0;
@@ -333,7 +334,7 @@ void print_mem()  //for reference
 	else printf("NO data\n");
 }
 
-void leak_result()
+void print_summary(void)
 {
 	mem_log * temp1 =header;
 	printf("\n\tSummary of data which are not freed :: Total %d blocks out of %d\n\n",allocation_count,total_allocation);
@@ -365,9 +366,3 @@ void leak_result()
 	else
 		printf("\t\tNO double free\n\n");
 }
-
-void last()
-{
-	atexit(leak_result);
-}
-
