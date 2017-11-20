@@ -47,11 +47,10 @@ typedef struct _MEM_LEAK MEM_LEAK;
 
 void add(MEM_INFO alloc_info);
 void erase(unsigned pos);
-void clear(void);
-void clear1(void);
+void clear(MEM_LEAK *);
 void add_mem_info (void * mem_ref, unsigned int size,  const char * file, unsigned int line);
 void remove_mem_info (void * mem_ref,const char * file, unsigned int line);
-int update_mem_info (void * mem_ref,const char * file, unsigned int line);
+int update_mem_info (void * mem_ref,const char * file, unsigned int line,int x);
 void record(MEM_INFO alloc_info,char *);
 void rec_mem(void);
 void print_all(void) __attribute__((destructor));
@@ -79,7 +78,7 @@ static MEM_LEAK * rec_next  = NULL;
 static MEM_LEAK_ctx rec_ctx= {0};
 
 /*
- * adds allocated and deallocated memory info. into the list
+ * adds allocated and deallocated memory info into record(rec_start) list
  *
  */
 void record(MEM_INFO alloc_info,char *type)
@@ -126,7 +125,7 @@ void record(MEM_INFO alloc_info,char *type)
 
 
 /*
- * adds allocated memory info. into the list
+ * adds allocated memory info into leak(ptr_start) list
  *
  */
 void add(MEM_INFO alloc_info)
@@ -169,7 +168,7 @@ void add(MEM_INFO alloc_info)
 }
 
 /*
- * erases memory info. from the list
+ * erases memory info from leak(ptr_start) list
  *
  */
 void erase(unsigned pos)
@@ -209,12 +208,12 @@ void erase(unsigned pos)
 }
 
 /*
- * deletes all the elements from the list
+ * deletes all the elements from both the list
  */
-void clear()
+void clear(MEM_LEAK * temp_start)
 {
-	MEM_LEAK * temp = ptr_start;
-	MEM_LEAK * alloc_info = ptr_start;
+	MEM_LEAK * temp = temp_start;
+	MEM_LEAK * alloc_info = temp_start;
 
 	while(alloc_info != NULL) 
 	{
@@ -223,37 +222,59 @@ void clear()
 		temp = alloc_info;
 	}
 }
+/*
+ * replacement for malloc,realloc,calloc,strdup and free
+ */
 
-void clear1()
-{
-	MEM_LEAK * temp = rec_start;
-	MEM_LEAK * alloc_info = rec_start;
-
-	while(alloc_info != NULL) 
-	{
-		alloc_info = alloc_info->next;
-		free(temp);
-		temp = alloc_info;
-	}
-}
 
 
 void * xrealloc (void*str,int size,const char *file,unsigned int line)
 {
-	int old_size = update_mem_info(str,file,line);
-	remove_mem_info(str,file,line);
-	rec_ctx.total -= old_size;
 	void * ptr = realloc (str,size);
-	if (ptr!= NULL) 
+	
+	int old_size = 0;
+	
+	if(str==NULL && ptr!=NULL)
 	{
 		add_mem_info(ptr,size+old_size,file,line);
 	}
+	else if(str!=NULL && ptr==str)
+	{
+		old_size = update_mem_info(str,file,line,0);
+		if(old_size==-1)
+		{
+			old_size=0;
+		}
+		else
+		{
+			remove_mem_info(str,file,line);
+		}
+		add_mem_info(ptr,size+old_size,file,line);
+		rec_ctx.total -= old_size;
+	}
+	else if(ptr!=str)
+	{
+		old_size = update_mem_info(str,file,line,1);
+		if(old_size==-1)
+		{
+			old_size=0;
+		}
+		else
+		{
+			remove_mem_info(str,file,line);
+		}
+		
+		add_mem_info(ptr,size+old_size,file,line);
+		rec_ctx.total -= old_size;
+	}
 	else
 	{
+		printf("Could not allocate the memory asked at line:%d of file:%s,but memory passed is valid\n",line,file);
 		assert(0);
 	}
 	return ptr;
 }
+
 char * xstrdup (const char *str, const char * file, unsigned int line)
 {
 	char * ptr = strdup (str);
@@ -263,9 +284,7 @@ char * xstrdup (const char *str, const char * file, unsigned int line)
 	}
 	return ptr;
 }
-/*
- * replacement of malloc
- */
+
 void * xmalloc (unsigned int size, const char * file, unsigned int line)
 {
 	void * ptr = malloc (size);
@@ -276,9 +295,6 @@ void * xmalloc (unsigned int size, const char * file, unsigned int line)
 	return ptr;
 }
 
-/*
- * replacement of calloc
- */
 void * xcalloc (unsigned int elements, unsigned int size, const char * file, unsigned int line)
 {
 	unsigned total_size;
@@ -292,9 +308,6 @@ void * xcalloc (unsigned int elements, unsigned int size, const char * file, uns
 }
 
 
-/*
- * replacement of free
- */
 void xfree(void * mem_ref, const char * file, unsigned int line)
 {
 	remove_mem_info(mem_ref, file, line);
@@ -334,7 +347,7 @@ void add_mem_info (void * mem_ref, unsigned int size,  const char * file, unsign
 }
 
 /*
- * if the allocated memory info is part of the list, removes it
+ * removes allocated memory if found
  *
  */
 void remove_mem_info (void * mem_ref, const char * file, unsigned int line)
@@ -365,7 +378,10 @@ void remove_mem_info (void * mem_ref, const char * file, unsigned int line)
 	}
 }
 
-int update_mem_info (void * mem_ref, const char * file, unsigned int line)
+/*
+ * Gets size of pointer hich is passes to realloc
+ */
+int update_mem_info (void * mem_ref, const char * file, unsigned int line, int x)
 {
 	unsigned short index;
 	MEM_LEAK  * leak_info ;
@@ -380,6 +396,7 @@ int update_mem_info (void * mem_ref, const char * file, unsigned int line)
 		{
 			leak_info->mem_info.line = line;
 			old_size = leak_info->mem_info.size;
+			if(x==0)record(leak_info->mem_info,"realloc");
 			flag=1;
 			break;
 		}
@@ -387,8 +404,7 @@ int update_mem_info (void * mem_ref, const char * file, unsigned int line)
 	MUTEX_UNLOCK(leak_ctx.g_cs);
 	if (flag==0)
 	{
-		printf("\nMemory corruption at line %d of file %s\n", line, file);
-		assert(0);	
+		old_size = -1;
 	}
 	return old_size;
 }
@@ -453,11 +469,11 @@ int ld_hex_printout(char *out_buf,const char *buf,
 	*dst++ = 0;
 	return ret;
 }
+
+
 /*
  * writes all info of the unallocated memory into a file
  */
- 
-
 void report_mem_leak(void)
 {
 	MEM_LEAK * leak_info;
@@ -494,13 +510,13 @@ void report_mem_leak(void)
 		fflush(fp_write);
 		fclose(fp_write);
 	}	
-	clear();
+	clear(ptr_start);
 	MUTEX_DESTROY(leak_ctx.g_cs);
 }
 
 
 /*
- * writes all info of the unallocated memory into a file
+ * writes all info of memory into a file
  */
 void rec_mem(void)
 {
@@ -538,11 +554,13 @@ void rec_mem(void)
 		fflush(fp_write);
 		fclose(fp_write);
 	}	
-	clear1();
+	clear(rec_start);
 	MUTEX_DESTROY(rec_ctx.g_cs);
 }
 
-
+/*
+ *	Destructor
+ */
 void print_all(void)
 {
 	report_mem_leak();
